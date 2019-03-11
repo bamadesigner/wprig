@@ -4,7 +4,10 @@
 // External dependencies
 export const gulpPlugins = require('gulp-load-plugins')();
 import path from 'path';
-import requireUncached from 'require-uncached';
+import importFresh from 'import-fresh';
+
+// Internal dependencies
+import {appendIgnoredSourceFiles, configValueDefined} from './utils';
 
 // Root path is where npm run commands happen
 export const rootPath = process.env.INIT_CWD;
@@ -12,8 +15,11 @@ export const rootPath = process.env.INIT_CWD;
 // Dev or production
 export const isProd = ( process.env.NODE_ENV === 'production' );
 
+// Define the config path
+export const configPath = `${rootPath}/config/themeConfig.js`;
+
 // get a fresh copy of the config
-export const config = requireUncached(`${rootPath}/config/themeConfig.js`);
+export const config = importFresh(configPath);
 
 // directory for the production theme
 export const prodThemePath = path.normalize(`${rootPath}/../${config.theme.slug}`);
@@ -53,7 +59,6 @@ let paths = {
 		key: `${rootPath}/BrowserSync/wp-rig-browser-sync-key.key`
 	},
 	config: {
-		cssVars: `${rootPath}/config/cssVariables.json`,
 		themeConfig: `${rootPath}/config/themeConfig.js`
 	},
 	php: {
@@ -67,20 +72,37 @@ let paths = {
 	},
 	styles: {
 		src: `${assetsDir}/css/src/**/*.css`,
+		srcDir: `${assetsDir}/css/src`,
+		srcWithIgnored: appendIgnoredSourceFiles(
+			// Start with all CSS source
+			`${assetsDir}/css/src/**/*.css`,
+			// Negate ignored files from config, if defined
+			configValueDefined('config.dev.styles.ignoredSourceFiles') ?
+				config.dev.styles.ignoredSourceFiles :
+				[],
+			// With the CSS source base path
+			`${assetsDir}/css/src`
+		),
 		sass: `${assetsDir}/css/src/**/*.scss`,
 		dest: `${assetsDir}/css/`
 	},
 	scripts: {
 		src: `${assetsDir}/js/src/**/*.js`,
+		srcWithIgnored: appendIgnoredSourceFiles(
+			// Start with all JS source
+			`${assetsDir}/js/src/**/*.js`,
+			// Negate ignored files from config, if defined
+			configValueDefined('config.dev.scripts.ignoredSourceFiles') ?
+				config.dev.scripts.ignoredSourceFiles :
+				[],
+			// With the JS source base path
+			`${assetsDir}/js/src`
+		),
 		dest: `${assetsDir}/js/`
 	},
 	images: {
 		src: `${assetsDir}/images/src/**/*.{jpg,JPG,png,svg,gif,GIF}`,
 		dest: `${assetsDir}/images/`
-	},
-	screenshot: {
-		src: `${rootPath}/screenshot.png`,
-		dest: `${rootPath}/`
 	},
 	languages: {
 		src: [
@@ -92,14 +114,15 @@ let paths = {
 		dest: `${rootPath}/languages/${nameFieldDefaults.slug}.pot`
 	},
 	export: {
-		src: [
-			`${rootPath}/style.css`,
-			`${rootPath}/readme.txt`,
-			`${rootPath}/LICENSE`,
-		],
+		src: [],
 		dest: `${prodThemePath}/`
 	}
 };
+
+// Add rootPath to filesToCopy and additionalFilesToCopy
+for ( let filePath of config.export.filesToCopy.concat( config.export.additionalFilesToCopy ) ) {
+	paths.export.src.push(`${rootPath}/${filePath}`);
+}
 
 // Override paths for production
 if( isProd ){
@@ -107,7 +130,6 @@ if( isProd ){
 	paths.styles.dest = `${prodAssetsDir}/css/`;
 	paths.scripts.dest = `${prodAssetsDir}/js/`;
 	paths.images.dest = `${prodAssetsDir}/images/`;
-	paths.screenshot.dest = `${prodThemePath}/`;
 	paths.languages = {
 		src: `${prodThemePath}/**/*.php`,
 		dest: `${prodThemePath}/languages/${config.theme.slug}.pot`
